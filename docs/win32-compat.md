@@ -17,15 +17,30 @@ the minimal patches that make it run on Windows without changing behavior elsewh
 ## lark-cli shim (Windows)
 
 Node cannot `spawn` `.cmd`/`.ps1` launchers (EFTYPE/EINVAL), so the Feishu Source
-needs a real `.exe`. A tiny C# shim forwards the raw command line to `node run.js`:
+needs a real `.exe`. A tiny C# shim forwards the raw command line to `node run.js`
+(build with `csc /nologo /out:lark-cli.exe LarkShim.cs`; point the Feishu source
+setting `cli` at the built exe). The shim passes `Environment.CommandLine` through
+verbatim — re-joining args breaks JSON values such as `--params '{"a":"b"}'`.
 
+```csharp
+// LarkShim.cs — adjust the two hard-coded paths to your machine
+using System;
+using System.Diagnostics;
+class LarkShim {
+  static int Main() {
+    var cl = Environment.CommandLine;
+    string rest;
+    if (cl.Length > 0 && cl[0] == '"') { var i = cl.IndexOf('"', 1); rest = i < 0 ? "" : cl.Substring(i + 1); }
+    else { var i = cl.IndexOf(' '); rest = i < 0 ? "" : cl.Substring(i); }
+    var psi = new ProcessStartInfo {
+      FileName = @"H:\k\nodejs\node.exe",
+      Arguments = "\"H:\\k\\DevTools\\nodejs\\node_global\\node_modules\\@larksuite\\cli\\scripts\\run.js\"" + rest,
+      UseShellExecute = false
+    };
+    using (var p = Process.Start(psi)) { p.WaitForExit(); return p.ExitCode; }
+  }
+}
 ```
-csc /nologo /out:lark-cli.exe LarkShim.cs   # .NET Framework csc works on any Windows
-```
-
-Point the Feishu source setting `cli` at the built `lark-cli.exe`. The shim passes
-`Environment.CommandLine` through verbatim — re-joining args breaks JSON values
-such as `--params '{"a":"b"}'`.
 
 ## Other deployment notes (Windows)
 
